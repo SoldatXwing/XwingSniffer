@@ -1,11 +1,12 @@
-﻿using PacketDotNet;
+﻿using Microsoft.Win32;
+using PacketDotNet;
 using SharpPcap;
-using System.Security.Cryptography;
+using System.Net.NetworkInformation;
+using NetworkApp.NetworkServices;
+using System.Text.RegularExpressions;
 public class Program
 {
     private static ICaptureDevice device = CaptureDeviceList.Instance.FirstOrDefault();
-    private static readonly List<string> blockList = new List<string> { "31", "192", "75", "10", "162", "73" };
-    private static List<PackageInformation> _capturedPackets = new List<PackageInformation>();
     public static void Main(string[] args)
     {
         Console.Title = "Xwing Sniffer";
@@ -14,7 +15,7 @@ public class Program
         while (run)
         {
 
-            device.OnPacketArrival += Device_OnPacketArrival;
+            device.OnPacketArrival += PackageService.Device_OnPacketArrival;
             device.Open(SharpPcap.DeviceModes.Promiscuous);
             device.StartCapture();
 
@@ -29,10 +30,17 @@ public class Program
             }
             else if (currentKey.KeyChar is 'c' || currentKey.KeyChar is 'C')
             {
-                _capturedPackets.Clear();
+                PackageService.ClearIps();
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("\nIps cleared!");
                 Console.ForegroundColor = ConsoleColor.White;
+            }
+            else if (currentKey.KeyChar is 'm' || currentKey.KeyChar is 'M')
+            {
+                device.StopCapture();
+                DisplayChangeMac();
+                Console.Clear();
+                ShowSniffer();
             }
             else if (currentKey.KeyChar is 's' || currentKey.KeyChar is 'S')
             {
@@ -44,6 +52,65 @@ public class Program
         device.StopCapture();
         device.Close();
     }
+    private static void DisplayChangeMac()
+    {
+        bool repeat;
+        do
+        {
+            repeat = false;
+            Console.Clear();
+            string newMac;
+            var macs = MacService.GetMacs();
+            if (macs is null)
+            {
+                Thread.Sleep(5000);
+                return;
+            }
+            for (int i = 0; i < macs.Count; i++)
+            {
+                Console.WriteLine($"[{i + 1}] {macs[i].adapterName} ({macs[i].adapterValue})");
+            }
+            Console.WriteLine("\nSelect your adapter to spoof using the number, press 0 to exit");
+            var choice = Console.ReadKey().KeyChar.ToString();
+            if (int.TryParse(choice, out int intChoice)) //Note: the + 1 and - 1 thing is only for UI user friendliness
+            {
+                Console.Clear();
+                if (intChoice == 0)
+                    return;
+                if (intChoice > macs.Count)
+                {
+                    Console.WriteLine("Invalid number!");
+                    return;
+                }
+                Console.WriteLine("Enter new Mac adress: (Format: FF-FF-FF-FF-FF) or leave blank to get random Mac.\nNote: this action can take some seconds. If the Adapter doesnt get enabled automaticly, enable it manually.\n\nEnter e to exit");
+                string? input = Console.ReadLine();
+                if (string.IsNullOrEmpty(input))
+                    newMac = MacService.GenerateRandomMac();
+                else
+                    if (Regex.Match(input, @"^([0-9A-Fa-f]{2}[-]){5}([0-9A-Fa-f]{2})$").Success)
+                    newMac = input;
+                else
+                {
+                    Console.Clear();
+                    Console.WriteLine("Given Mac adress was not in the right format!");
+                    Thread.Sleep(4000);
+                    return;
+                }
+
+                if (input == "e" || input == "E")
+                    return;
+
+                if (!MacService.SpoofMAC(newMac, macs[intChoice - 1].adapterName))
+                    return;
+                Console.WriteLine("Mac adress got sucessfully spoofed!");
+
+            }
+            else
+                repeat = true;
+
+        } while (repeat);
+
+    }
     private static void DisplayCapturedPackages()
     {
         bool repeat;
@@ -52,7 +119,7 @@ public class Program
         {
             repeat = true;
             Console.Clear();
-            foreach (var package in _capturedPackets)
+            foreach (var package in PackageService.GetIps())
             {
                 string information = $"Country: {package.Country} \n" +
                             $"RegionName: {package.Regionname} \n" +
@@ -98,52 +165,11 @@ public class Program
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine("Currently sniffing on: " + device.Description);
         Console.ForegroundColor = ConsoleColor.Magenta;
-        Console.WriteLine("\n[I] Change sniffing interface\n[C] Clear captured Ips\n[S] Show captured packages\n[E] Exit\n");
+        Console.WriteLine("\n[I] Change sniffing interface\n[C] Clear captured Ips\n[S] Show captured packages\n[M] Change Systems Mac\n[E] Exit\n");
         Console.ForegroundColor = ConsoleColor.White;
     }
-    private static void Device_OnPacketArrival(object sender, PacketCapture e)
-    {
-        var rawPacket = e.GetPacket();
-        var packet = Packet.ParsePacket(rawPacket.LinkLayerType, rawPacket.Data);
-        var ipPacket = packet.Extract<IPv4Packet>();
-
-        if (ipPacket is not null)
-        {
-            string srcIp = ipPacket.SourceAddress.ToString();
-
-            if (!blockList.Contains(srcIp.Split('.')[0])
-                && ipPacket.Protocol == ProtocolType.Udp
-                && !_capturedPackets.Any(c => c.Ip == srcIp))
-            {
-                string geoDataFormated = GetGeoInfo(srcIp).Result;
-                Console.WriteLine(geoDataFormated);
-            }
-        }
-    }
-    private static async Task<string> GetGeoInfo(string ip)
-    {
-        using (HttpClient client = new HttpClient())
-        {
-            var response = await client.GetAsync($"http://ip-api.com/json/{ip}");
-            if (response.IsSuccessStatusCode)
-            {
-                PackageInformation responsePackage = Newtonsoft.Json.JsonConvert.DeserializeObject<PackageInformation>(await response.Content.ReadAsStringAsync());
-                responsePackage.Ip = ip;
-                _capturedPackets.Add(responsePackage);
-                return $"Country: {responsePackage.Country} \n" +
-                        $"RegionName: {responsePackage.Regionname} \n" +
-                        $"City: {responsePackage.City} \n" +
-                        $"PostCode: {responsePackage.Zip}\n" +
-                        $"Lat: {responsePackage.Lat} \n" +
-                        $"Lon {responsePackage.Lon}  \n" +
-                        $"Ip: {ip} \n" +
-                        $"Org: {responsePackage.Org}\n" +
-                        $"Isp: {responsePackage.Isp}\n";
-
-            }
-            return "";
-        }
-    }
+   
+   
     private static void ShowInterfaceMenu()
     {
         bool repeat;
