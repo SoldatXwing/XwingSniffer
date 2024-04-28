@@ -1,12 +1,11 @@
-﻿using Microsoft.Win32;
-using PacketDotNet;
+﻿using NetworkApp.NetworkServices;
 using SharpPcap;
-using System.Net.NetworkInformation;
-using NetworkApp.NetworkServices;
 using System.Text.RegularExpressions;
 public class Program
 {
-    private static ICaptureDevice device = CaptureDeviceList.Instance.FirstOrDefault();
+    private static ICaptureDevice device = null;
+    private static bool IsSniffing = false;
+
     public static void Main(string[] args)
     {
         Console.Title = "Xwing Sniffer";
@@ -15,21 +14,28 @@ public class Program
         while (run)
         {
 
-            device.OnPacketArrival += PackageService.Device_OnPacketArrival;
-            device.Open(SharpPcap.DeviceModes.Promiscuous);
-            device.StartCapture();
 
+            if (IsSniffing)
+            {
+                device.OnPacketArrival += PackageService.Device_OnPacketArrival;
+                device.Open(SharpPcap.DeviceModes.Promiscuous);
+                device.StartCapture();
+            }
             var currentKey = Console.ReadKey();
             if (currentKey.KeyChar is 'e' || currentKey.KeyChar is 'E')
                 run = false;
             else if (currentKey.KeyChar is 'i' || currentKey.KeyChar is 'I')
             {
+                if (!IsSniffing)
+                    continue;
                 device.StopCapture();
                 ShowInterfaceMenu();
                 ShowSniffer();
             }
             else if (currentKey.KeyChar is 'c' || currentKey.KeyChar is 'C')
             {
+                if (!IsSniffing)
+                    continue;
                 PackageService.ClearIps();
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("\nIps cleared!");
@@ -37,20 +43,34 @@ public class Program
             }
             else if (currentKey.KeyChar is 'm' || currentKey.KeyChar is 'M')
             {
-                device.StopCapture();
+                if (IsSniffing)
+                    device.StopCapture();
                 DisplayChangeMac();
                 Console.Clear();
                 ShowSniffer();
             }
             else if (currentKey.KeyChar is 's' || currentKey.KeyChar is 'S')
             {
+                if (!IsSniffing)
+                    continue;
                 device.StopCapture();
                 DisplayCapturedPackages();
                 ShowSniffer();
             }
+            else if (currentKey.KeyChar is 't' || currentKey.KeyChar is 'T')
+            {
+                IsSniffing = IsSniffing ? false : true;
+                if (IsSniffing)
+                    device = CaptureDeviceList.Instance.FirstOrDefault();
+                Console.Clear();
+                ShowSniffer();
+            }
         }
-        device.StopCapture();
-        device.Close();
+        if (IsSniffing)
+        {
+            device.StopCapture();
+            device.Close();
+        }
     }
     private static void DisplayChangeMac()
     {
@@ -79,6 +99,7 @@ public class Program
                     return;
                 if (intChoice > macs.Count)
                 {
+                    Thread.Sleep(5000);
                     Console.WriteLine("Invalid number!");
                     return;
                 }
@@ -86,6 +107,8 @@ public class Program
                 string? input = Console.ReadLine();
                 if (string.IsNullOrEmpty(input))
                     newMac = MacService.GenerateRandomMac();
+                else if (input == "e" || input == "E")
+                    return;
                 else
                     if (Regex.Match(input, @"^([0-9A-Fa-f]{2}[-]){5}([0-9A-Fa-f]{2})$").Success)
                     newMac = input;
@@ -97,8 +120,6 @@ public class Program
                     return;
                 }
 
-                if (input == "e" || input == "E")
-                    return;
 
                 if (!MacService.SpoofMAC(newMac, macs[intChoice - 1].adapterName))
                     return;
@@ -155,21 +176,23 @@ public class Program
     }
     private static void ShowSniffer()
     {
-        if (device == null)
-        {
-            Console.WriteLine("No capture devices found.");
-            return;
-        }
         Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine("____  ___       .__                            \r\n\\   \\/  /_  _  _|__| ____    ____              \r\n \\     /\\ \\/ \\/ /  |/    \\  / ___\\             \r\n /     \\ \\     /|  |   |  \\/ /_/  >            \r\n/___/\\  \\ \\/\\_/ |__|___|  /\\___  /             \r\n      \\_/               \\//_____/              \r\n  _________      .__  _____  _____             \r\n /   _____/ ____ |__|/ ____\\/ ____\\___________ \r\n \\_____  \\ /    \\|  \\   __\\\\   __\\/ __ \\_  __ \\\r\n /        \\   |  \\  ||  |   |  | \\  ___/|  | \\/\r\n/_______  /___|  /__||__|   |__|  \\___  >__|   \r\n        \\/     \\/                     \\/       "); //Xwing Sniffer
         Console.ForegroundColor = ConsoleColor.White;
-        Console.WriteLine("Currently sniffing on: " + device.Description);
+        if (IsSniffing)
+            Console.WriteLine("Currently sniffing on: " + device.Description);
+        else
+            Console.WriteLine("Press T to start sniffing");
         Console.ForegroundColor = ConsoleColor.Magenta;
-        Console.WriteLine("\n[I] Change sniffing interface\n[C] Clear captured Ips\n[S] Show captured packages\n[M] Change Systems Mac\n[E] Exit\n");
+        if (IsSniffing)
+            Console.WriteLine("\n[I] Change sniffing interface\n[C] Clear captured Ips\n[S] Show captured packages\n[M] Change Systems Mac\n[E] Exit\n");
+        else
+            Console.WriteLine("\n[M] Change Systems Mac\n[E] Exit\n");
+
         Console.ForegroundColor = ConsoleColor.White;
     }
-   
-   
+
+
     private static void ShowInterfaceMenu()
     {
         bool repeat;
@@ -178,6 +201,11 @@ public class Program
             repeat = false;
             Console.Clear();
             var interfaces = CaptureDeviceList.Instance;
+            if (interfaces is null)
+            {
+                Console.WriteLine("No interfaces found!");
+                return;
+            }
             Console.WriteLine("Available interfaces: ");
             for (int i = 0; i < interfaces.Count; i++)
             {
