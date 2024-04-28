@@ -23,7 +23,10 @@ public class Program
             }
             var currentKey = Console.ReadKey();
             if (currentKey.KeyChar is 'e' || currentKey.KeyChar is 'E')
+            {
+
                 run = false;
+            }
             else if (currentKey.KeyChar is 'i' || currentKey.KeyChar is 'I')
             {
                 if (!IsSniffing)
@@ -60,10 +63,23 @@ public class Program
             else if (currentKey.KeyChar is 't' || currentKey.KeyChar is 'T')
             {
                 IsSniffing = IsSniffing ? false : true;
-                if (IsSniffing)
-                    device = CaptureDeviceList.Instance.FirstOrDefault();
-                Console.Clear();
-                ShowSniffer();
+                try
+                {
+                    if (IsSniffing)
+                        device = CaptureDeviceList.Instance.FirstOrDefault();
+                    Console.Clear();
+                    ShowSniffer();
+                }
+                catch (DllNotFoundException)
+                {
+                    IsSniffing = false;
+                    Console.Clear();
+                    Console.WriteLine("Npcap not found! Make sure you have Npcap installed. Check the installation guide for more details.");
+                    Thread.Sleep(5000);
+                    Console.Clear();
+                    ShowSniffer();
+                }
+
             }
         }
         if (IsSniffing)
