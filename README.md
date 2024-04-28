@@ -5,5 +5,5 @@
 <p>Functionality to change adapter's MAC address.</p>
 <span>Note: To change the MAC address, ensure the program runs in admin mode!</span>
 <br/><br/>
-<h1>Information</h1>
-<p>This program is for educational purposes only.</p>
+<h1>Disclaimer</h1>
+<p>This tool is only for testing and academic purposes and can only be used where strict consent has been given. Do not use it for illegal purposes! It is the end user’s responsibility to obey all applicable local, state, and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this tool and software in general.</p>
