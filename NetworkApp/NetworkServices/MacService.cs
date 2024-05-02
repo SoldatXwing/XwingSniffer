@@ -1,8 +1,11 @@
 ﻿using Microsoft.Win32;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,6 +13,8 @@ namespace NetworkApp.NetworkServices
 {
     public static class MacService
     {
+        private const string ValidMacPrefixesFilePath = "Data/validMacPrefixes.json";
+        private const string Characters = "ABCDEF0123456789";
         public static List<(string adapterName, string adapterValue)>? GetMacs()
         {
             List<(string adapterName, string adapterValue)> macInformation = new List<(string adapterName, string adapterValue)>();
@@ -107,23 +112,32 @@ namespace NetworkApp.NetworkServices
         }
         public static string GenerateRandomMac()
         {
-            string chars = "ABCDEF0123456789";
-            string windows = "26AE";
-            string result = "";
             Random random = new Random();
+            string result = string.Empty;
+            int macAddressLength = 0;
 
-            result += chars[random.Next(chars.Length)];
-            result += windows[random.Next(windows.Length)];
-
-            for (int i = 0; i < 5; i++)
+            try
             {
-                result += "-";
-                result += chars[random.Next(chars.Length)];
-                result += chars[random.Next(chars.Length)];
-
+                var validMacPrefixes = JArray.Parse(File.ReadAllText(ValidMacPrefixesFilePath));
+                result = validMacPrefixes[random.Next(validMacPrefixes.Count)]["macPrefix"]!.ToString();
+                macAddressLength = 3;
+            }
+            catch(FileNotFoundException)
+            {
+                macAddressLength = 6;
+                Console.WriteLine("Valid mac adress file not found, generating random mac.");
+                Thread.Sleep(2500);
             }
 
+            for (int i = 0; i < macAddressLength; i++)
+            {
+                if(result != string.Empty)
+                    result += "-";
+                result += Characters[random.Next(Characters.Length)];
+                result += Characters[random.Next(Characters.Length)];
+            }
             return result;
+
         }
 
 

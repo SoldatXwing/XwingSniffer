@@ -119,7 +119,7 @@ public class Program
                     Console.WriteLine("Invalid number!");
                     return;
                 }
-                Console.WriteLine("Enter new Mac adress: (Format: FF-FF-FF-FF-FF) or leave blank to get random Mac.\nNote: this action can take some seconds. If the Adapter doesnt get enabled automaticly, enable it manually.\n\nEnter e to exit");
+                Console.WriteLine("Enter a new MAC address: (Format: FF-FF-FF-FF-FF-FF) or leave blank to get a random MAC address (100% valid if the validMacPrefixes file exists).\nNote: This action may take a few seconds. If the adapter doesn't enable automatically, enable it manually.\n\nEnter 'e' to exit:");
                 string? input = Console.ReadLine();
                 if (string.IsNullOrEmpty(input))
                     newMac = MacService.GenerateRandomMac();
@@ -139,7 +139,9 @@ public class Program
 
                 if (!MacService.SpoofMAC(newMac, macs[intChoice - 1].adapterName))
                     return;
+                Console.Clear();
                 Console.WriteLine("Mac adress got sucessfully spoofed!");
+                Thread.Sleep(3000);
 
             }
             else
